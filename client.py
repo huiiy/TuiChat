@@ -3,7 +3,7 @@
 
 import socket
 import threading
-import time
+import sys # Import sys to use for flushing stdout
 
 def receive_messages(client_socket):
     """
@@ -11,18 +11,22 @@ def receive_messages(client_socket):
     """
     while True:
         try:
-            # Receive message from the server.
             message = client_socket.recv(1024).decode('utf-8')
             
             if message == 'NICK':
-                # The server is asking for our nickname.
                 client_socket.send(nickname.encode('utf-8'))
             else:
-                # Print the received message for the user to see.
-                print(message)
+                # This is the magic part for a clean UI.
+                # \r moves the cursor to the beginning of the line.
+                # ANSI escape code \x1b[2K clears the entire line.
+                # We then print the message, and then re-print the user's prompt.
+                sys.stdout.write('\r\x1b[2K') # Clear the current line
+                sys.stdout.write(f"{message}\n") # Print the received message
+                sys.stdout.write(f"{nickname}: ") # Reprint the user's prompt
+                sys.stdout.flush() # Force the output to display immediately
+
         except:
-            # An error occurred, likely the server has closed the connection.
-            print("An error occurred! Disconnected from server.")
+            print("\nAn error occurred! Disconnected from server.")
             client_socket.close()
             break
 
@@ -30,49 +34,49 @@ def send_messages(client_socket, nickname):
     """
     This function runs in the main thread, waiting for the user to type a message.
     """
+    # The initial prompt is now handled by the receive_messages function
+    # when the first message ("Connected to the server!") arrives.
     while True:
-        # Wait for user input.
-        message_text = input(f"{nickname}: ")
-        
-        # Format the message with the user's nickname.
-        full_message = f"{nickname}: {message_text}"
-        
-        # Send the message to the server.
         try:
+            message_text = input() # Input no longer needs a prompt string
+            
+            # Move cursor up one line and clear it, to remove the line the user typed on
+            sys.stdout.write("\x1b[1A\x1b[2K")
+            
+            full_message = f"{nickname}: {message_text}"
             client_socket.send(full_message.encode('utf-8'))
+        except (KeyboardInterrupt, EOFError):
+            print("\nLeaving the chat.")
+            client_socket.close()
+            break
         except:
             print("Could not send message. Connection might be closed.")
+            client_socket.close()
             break
+
 
 # --- Client Setup ---
 
-# Ask the user for their desired nickname.
 nickname = input("Choose your nickname: ")
-
-# Ask for the server's IP address. For local testing, this will be '127.0.0.1'.
-# If the server is on another computer on your network, use its local IP address.
 server_ip = input("Enter server IP address (e.g., 127.0.0.1): ")
 PORT = 12345
 
-# Create a socket object.
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 try:
-    # Connect to the server.
     client.connect((server_ip, PORT))
 except ConnectionRefusedError:
     print("Connection failed. Is the server running on that IP?")
-    exit() # Exit the script if connection fails.
+    exit()
+except socket.gaierror:
+    print("Hostname could not be resolved. Check the IP address.")
+    exit()
 
 
 # --- Start Threads for Sending and Receiving ---
 
-# Create and start a thread for receiving messages.
-# This allows us to receive messages at the same time we are typing a new one.
 receive_thread = threading.Thread(target=receive_messages, args=(client,))
+receive_thread.daemon = True # Allows main thread to exit even if this thread is running
 receive_thread.start()
 
-# Start the function for sending messages in the main thread.
-time.sleep(0.1)
 send_messages(client, nickname)
-
