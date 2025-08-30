@@ -3,6 +3,7 @@
 
 import socket
 import threading
+import time
 
 def receive_messages(client_socket):
     """
@@ -31,7 +32,7 @@ def send_messages(client_socket, nickname):
     """
     while True:
         # Wait for user input.
-        message_text = input("")
+        message_text = input(f"{nickname}: ")
         
         # Format the message with the user's nickname.
         full_message = f"{nickname}: {message_text}"
@@ -72,5 +73,6 @@ receive_thread = threading.Thread(target=receive_messages, args=(client,))
 receive_thread.start()
 
 # Start the function for sending messages in the main thread.
+time.sleep(0.1)
 send_messages(client, nickname)
 
